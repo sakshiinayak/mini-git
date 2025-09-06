@@ -23,7 +23,7 @@ func writeObject(objectType string, content []byte) string {
 	file := dir + "/" + hash[2:]
 
 	os.MkdirAll(dir, 0755)
-	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0444)
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating object file: %s\n", err)
 		os.Exit(1)
@@ -150,12 +150,13 @@ func cmdLsTree(args []string) {
 }
 
 func cmdCommitTree(args []string) {
-	if len(args) < 4 || args[0] != "-m" {
+	if len(args) < 3 || args[1] != "-m" {
 		fmt.Fprintf(os.Stderr, "usage: mygit commit-tree <tree_hash> -m <msg>\n")
 		os.Exit(1)
 	}
+
 	treeHash := args[0]
-	message := args[2]
+	message := strings.Join(args[2:], " ") // join all remaining args as commit message
 
 	content := fmt.Sprintf("tree %s\n\n%s\n", treeHash, message)
 	commitHash := writeObject("commit", []byte(content))
