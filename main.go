@@ -31,8 +31,16 @@ func writeObject(objectType string, content []byte) string {
 	defer f.Close()
 
 	zw := zlib.NewWriter(f)
-	_, _ = zw.Write(object)
-	zw.Close()
+	_, err = zw.Write(object)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error writing object: %s\n", err)
+		os.Exit(1)
+	}
+	err = zw.Close()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error closing zlib writer: %s\n", err)
+		os.Exit(1)
+	}
 
 	return hash
 }
@@ -163,8 +171,65 @@ func cmdCommitTree(args []string) {
 	fmt.Println(commitHash)
 }
 
+func copyDir(src string, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		targetPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(targetPath, info.Mode())
+		}
+
+		// Copy file
+		srcFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		dstFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+
+		_, err = io.Copy(dstFile, srcFile)
+		return err
+	})
+}
+
 func cmdClone(args []string) {
-	fmt.Println("Cloning repository from:", args[0])
+	if len(args) < 2 {
+		fmt.Fprintf(os.Stderr, "usage: mygit clone <source_repo> <destination_dir>\n")
+		os.Exit(1)
+	}
+
+	srcRepo := args[0]
+	dstRepo := args[1]
+
+	srcGit := filepath.Join(srcRepo, ".git")
+	if _, err := os.Stat(srcGit); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "error: %s is not a git repository\n", srcRepo)
+		os.Exit(1)
+	}
+
+	os.MkdirAll(dstRepo, 0755)
+
+	dstGit := filepath.Join(dstRepo, ".git")
+	err := copyDir(srcGit, dstGit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error cloning repo: %s\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Cloned repository from %s to %s\n", srcRepo, dstRepo)
 }
 
 func main() {
